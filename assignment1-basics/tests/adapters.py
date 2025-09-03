@@ -9,6 +9,10 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
+import regex as re
+from collections import defaultdict
+from tqdm import tqdm
+
 
 def run_linear(
     d_in: int,
@@ -589,4 +593,79 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    vocab = {i: bytes([i]) for i in range(256)}
+    curr_vocab_size = 256
+    for st in special_tokens:
+        vocab[curr_vocab_size] = st.encode("utf-8")
+        curr_vocab_size += 1
+    
+    merges = []
+
+     # The Regex Pattern for Pre-tokenization
+    PAT = r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+
+    # Think about whether you'd like to replace with a streamed/buffed implementation
+    fd = os.open(input_path, os.O_RDONLY)
+    data = os.read(fd, os.path.getsize(input_path))
+    os.close(fd)
+    text = data.decode("utf-8")
+
+    if special_tokens:
+        pattern = "|".join(re.escape(tok) for tok in special_tokens)
+        chunks = [c for c in re.split(pattern, text) if c]
+    else:
+        chunks = [text]
+
+    #replace this with finditer later [LATER]
+    parts = []
+    for c in chunks:
+        for tok in re.findall(PAT, c):
+            parts.append(tuple(bytes([b]) for b in tok.encode("utf8"))) 
+
+    loop_counter = 0
+    total = vocab_size - curr_vocab_size
+    pbar = tqdm(total=total, desc="BPE")
+
+    while curr_vocab_size < vocab_size:
+        merge_dict = defaultdict(int)
+        for part in parts:
+            total_letters = len(part)
+            k = 0
+            while (k+1) < total_letters:
+                merge_dict[(part[k], part[k+1])] += 1
+                k +=1
+
+        if not merge_dict:
+            break
+        new_token = max(merge_dict.items(), key=lambda x: (x[1], x[0]))[0] #max is EMPTY [TODO]
+        merges.append((new_token[0], new_token[1]))
+        new_token = new_token[0] + new_token[1]
+        vocab[curr_vocab_size] = new_token
+        curr_vocab_size += 1
+
+        def apply_merge(part):
+            j = 0
+            out = []
+            while j+1 < len(part):
+                if (part[j] + part[j+1]) == new_token:
+                    out.append(new_token)
+                    j += 2
+                else:
+                    out.append(part[j])
+                    j += 1
+                
+            if j < len(part):
+                out.append(part[j])
+            return tuple(out)
+
+        new_parts = [apply_merge(p) for p in parts]
+        if new_parts == parts:
+            break
+        parts = new_parts
+        
+        pbar.update(1)
+        loop_counter+= 1
+        
+    pbar.close()
+    return (vocab, merges)
+
