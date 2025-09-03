@@ -29,4 +29,7 @@ START AGAIN: FROM SUBWORD TOKENIZATION
 # Questions:
 - Gotta look into how the special tokens are handled and if I am handling them correctly
 
+# Later
+- gotta use multi-processing for tokenization
+- gotta profile (cProfile or Scalene) and optimize
 
