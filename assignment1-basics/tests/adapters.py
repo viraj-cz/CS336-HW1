@@ -16,6 +16,8 @@ from cs336_basics.pretokenization_example import find_chunk_boundaries
 from multiprocessing import Pool
 from itertools import chain
 
+PAT = None
+
 
 def run_linear(
     d_in: int,
@@ -568,9 +570,14 @@ def get_tokenizer(
     """
     raise NotImplementedError
 
+def init_worker():
+    global PAT
+    PAT = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+
 
 def worker(args):
         input_path, start, end, special_tokens = args
+        global PAT
         with open(input_path, "rb") as f:
             f.seek(start)
             pre_chunk = f.read(end - start).decode("utf-8", errors="ignore")
@@ -581,11 +588,12 @@ def worker(args):
             else:
                 pre_chunk = [pre_chunk]
             
-        PAT = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        # 
         parts = []
         for c in pre_chunk:
-            for tok in PAT.findall(c): #replace this with finditer later [LATER]
-                parts.append(tuple(bytes([b]) for b in tok.encode("utf8"))) 
+            for m in PAT.finditer(c):
+                tok = m.group(0)
+                parts.append(tuple(bytes([b]) for b in tok.encode("utf8")))
         return parts
 
 
@@ -637,7 +645,7 @@ def run_train_bpe(
     num_chunks = max(0, len(args_list))
     num_processes = min(num_processes, max(1, num_chunks))
 
-    with Pool(processes=num_processes) as pool:
+    with Pool(processes=num_processes, initializer=init_worker) as pool:
         results = pool.map(worker, args_list)
     
     parts = list(chain.from_iterable(results)) #check [LATER]
@@ -694,9 +702,6 @@ def run_train_bpe(
             break
         parts = new_parts
 
-        #now here we only want to loop over and calculate things that have changed?
-        #so that means we shall need a way to keep track of all the parts that have changed?
-        #now first we need to remove all the bigrams:
         for part in changed_parts_old:
             total_letters = len(part)
             k = 0
@@ -718,3 +723,9 @@ def run_train_bpe(
         
     pbar.close()
     return (vocab, merges)
+
+#TODO:
+#1) Compile Regex only once
+#2) Keep a max-heap instead of max(merge_dict)
+#3) “tuples of bytes” -> “ints”, and then make the final change later
+#4) Clean the code
