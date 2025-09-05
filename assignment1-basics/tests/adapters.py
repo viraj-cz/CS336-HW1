@@ -655,19 +655,34 @@ def run_train_bpe(
     pbar = tqdm(total=total, desc="BPE")
 
     merge_dict = defaultdict(int)
+    max_bucket = defaultdict(set)
+    current_max = 0
+
     for part in parts:
         total_letters = len(part)
         k = 0
         while (k+1) < total_letters:
-            merge_dict[(part[k], part[k+1])] += 1
-            k +=1
+            pair = (part[k], part[k+1])
+            old = merge_dict[pair]
+            if old > 0:
+                max_bucket[old].discard(pair)
+            new = old + 1
+            merge_dict[pair] = new
+            max_bucket[new].add(pair)
+            if new > current_max:
+                current_max = new
+            k += 1
 
     while (curr_vocab_size < vocab_size):
         
         if not merge_dict:
             break
-
-        best_pair = max(merge_dict.items(), key=lambda x: (x[1], x[0]))[0] #max is EMPTY [TODO]
+        
+        while current_max > 0 and not max_bucket[current_max]:
+            current_max -= 1
+        if current_max == 0:
+            break
+        best_pair = max(max_bucket[current_max])
         merges.append((best_pair[0], best_pair[1]))
         new_token = best_pair[0] + best_pair[1]
         vocab[curr_vocab_size] = new_token
@@ -706,26 +721,35 @@ def run_train_bpe(
             total_letters = len(part)
             k = 0
             while (k+1) < total_letters:
-                merge_dict[(part[k], part[k+1])] -= 1
-                if merge_dict[(part[k], part[k+1])] == 0:
-                    merge_dict.pop((part[k], part[k+1]))
-                k +=1
+                pair = (part[k], part[k+1])
+                old = merge_dict[pair]
+                if old > 0:
+                    max_bucket[old].discard(pair)
+                    new = old - 1
+                    if new > 0:
+                        merge_dict[pair] = new
+                        max_bucket[new].add(pair)
+                    else:
+                        merge_dict.pop(pair, None)
+                k += 1
             
         for part in changed_parts_new:
             total_letters = len(part)
             k = 0
             while (k+1) < total_letters:
-                merge_dict[(part[k], part[k+1])] += 1
-                k +=1
+                pair = (part[k], part[k+1])
+                old = merge_dict[pair]
+                if old > 0:
+                    max_bucket[old].discard(pair)
+                new = old + 1
+                merge_dict[pair] = new
+                max_bucket[new].add(pair)
+                if new > current_max:
+                    current_max = new
+                k += 1
         
         pbar.update(1)
         loop_counter+= 1
         
     pbar.close()
     return (vocab, merges)
-
-#TODO:
-#1) Compile Regex only once
-#2) Keep a max-heap instead of max(merge_dict)
-#3) “tuples of bytes” -> “ints”, and then make the final change later
-#4) Clean the code
