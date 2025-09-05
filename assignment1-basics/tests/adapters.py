@@ -590,10 +590,10 @@ def worker(args):
 
 
 def run_train_bpe(
-    input_path: str,
+    input_path: str | os.PathLike,
     vocab_size: int,
     special_tokens: list[str],
-    max_loops=None,
+    **kwargs,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """Given the path to an input corpus, run train a BPE tokenizer and
     output its vocabulary and merges.
@@ -616,7 +616,6 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    # use multi-processing and chunks [LATER]
 
     vocab = {i: bytes([i]) for i in range(256)}
     curr_vocab_size = 256
@@ -644,23 +643,25 @@ def run_train_bpe(
     parts = list(chain.from_iterable(results)) #check [LATER]
                 
     loop_counter = 0
-    total = (vocab_size - curr_vocab_size) if max_loops is None else min(vocab_size - curr_vocab_size, max_loops)
+    total = vocab_size - curr_vocab_size
     pbar = tqdm(total=total, desc="BPE")
 
-    while (max_loops is None or loop_counter < max_loops ) and (curr_vocab_size < vocab_size):
-        merge_dict = defaultdict(int)
-        for part in parts:
-            total_letters = len(part)
-            k = 0
-            while (k+1) < total_letters:
-                merge_dict[(part[k], part[k+1])] += 1
-                k +=1
+    merge_dict = defaultdict(int)
+    for part in parts:
+        total_letters = len(part)
+        k = 0
+        while (k+1) < total_letters:
+            merge_dict[(part[k], part[k+1])] += 1
+            k +=1
 
+    while (curr_vocab_size < vocab_size):
+        
         if not merge_dict:
             break
-        new_token = max(merge_dict.items(), key=lambda x: (x[1], x[0]))[0] #max is EMPTY [TODO]
-        merges.append((new_token[0], new_token[1]))
-        new_token = new_token[0] + new_token[1]
+
+        best_pair = max(merge_dict.items(), key=lambda x: (x[1], x[0]))[0] #max is EMPTY [TODO]
+        merges.append((best_pair[0], best_pair[1]))
+        new_token = best_pair[0] + best_pair[1]
         vocab[curr_vocab_size] = new_token
         curr_vocab_size += 1
 
@@ -668,7 +669,7 @@ def run_train_bpe(
             j = 0
             out = []
             while j+1 < len(part):
-                if (part[j] + part[j+1]) == new_token:
+                if (part[j], part[j+1]) == best_pair:
                     out.append(new_token)
                     j += 2
                 else:
@@ -679,10 +680,38 @@ def run_train_bpe(
                 out.append(part[j])
             return tuple(out)
 
-        new_parts = [apply_merge(p) for p in parts]
+        new_parts = []
+        changed_parts_new = []
+        changed_parts_old = []
+        for p in parts:
+            new_p = apply_merge(p)
+            new_parts.append(new_p)
+            if new_p != p:
+                changed_parts_old.append(p)
+                changed_parts_new.append(new_p)
+
         if new_parts == parts:
             break
         parts = new_parts
+
+        #now here we only want to loop over and calculate things that have changed?
+        #so that means we shall need a way to keep track of all the parts that have changed?
+        #now first we need to remove all the bigrams:
+        for part in changed_parts_old:
+            total_letters = len(part)
+            k = 0
+            while (k+1) < total_letters:
+                merge_dict[(part[k], part[k+1])] -= 1
+                if merge_dict[(part[k], part[k+1])] == 0:
+                    merge_dict.pop((part[k], part[k+1]))
+                k +=1
+            
+        for part in changed_parts_new:
+            total_letters = len(part)
+            k = 0
+            while (k+1) < total_letters:
+                merge_dict[(part[k], part[k+1])] += 1
+                k +=1
         
         pbar.update(1)
         loop_counter+= 1
