@@ -12,6 +12,9 @@ from torch import Tensor
 import regex as re
 from collections import defaultdict
 from tqdm import tqdm
+from cs336_basics.pretokenization_example import find_chunk_boundaries
+from multiprocessing import Pool
+from itertools import chain
 
 
 def run_linear(
@@ -566,11 +569,31 @@ def get_tokenizer(
     raise NotImplementedError
 
 
+def worker(args):
+        input_path, start, end, special_tokens = args
+        with open(input_path, "rb") as f:
+            f.seek(start)
+            pre_chunk = f.read(end - start).decode("utf-8", errors="ignore")
+
+            if special_tokens:
+                pattern = "|".join(re.escape(tok) for tok in special_tokens)
+                pre_chunk = [c for c in re.split(pattern, pre_chunk) if c]
+            else:
+                pre_chunk = [pre_chunk]
+            
+        PAT = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        parts = []
+        for c in pre_chunk:
+            for tok in PAT.findall(c): #replace this with finditer later [LATER]
+                parts.append(tuple(bytes([b]) for b in tok.encode("utf8"))) 
+        return parts
+
+
 def run_train_bpe(
-    input_path: str | os.PathLike,
+    input_path: str,
     vocab_size: int,
     special_tokens: list[str],
-    **kwargs,
+    max_loops=None,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """Given the path to an input corpus, run train a BPE tokenizer and
     output its vocabulary and merges.
@@ -593,6 +616,8 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
+    # use multi-processing and chunks [LATER]
+
     vocab = {i: bytes([i]) for i in range(256)}
     curr_vocab_size = 256
     for st in special_tokens:
@@ -600,33 +625,29 @@ def run_train_bpe(
         curr_vocab_size += 1
     
     merges = []
+     
+    args_list = []
+    with open(input_path, "rb") as f:
+        num_processes = os.cpu_count() or 1
+        boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
 
-     # The Regex Pattern for Pre-tokenization
-    PAT = r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+        for start, end in zip(boundaries[:-1], boundaries[1:]):
+            args_list.append((input_path, start, end, special_tokens))
 
-    # Think about whether you'd like to replace with a streamed/buffed implementation
-    fd = os.open(input_path, os.O_RDONLY)
-    data = os.read(fd, os.path.getsize(input_path))
-    os.close(fd)
-    text = data.decode("utf-8")
+    #CHECK [LATER]
+    num_chunks = max(0, len(args_list))
+    num_processes = min(num_processes, max(1, num_chunks))
 
-    if special_tokens:
-        pattern = "|".join(re.escape(tok) for tok in special_tokens)
-        chunks = [c for c in re.split(pattern, text) if c]
-    else:
-        chunks = [text]
-
-    #replace this with finditer later [LATER]
-    parts = []
-    for c in chunks:
-        for tok in re.findall(PAT, c):
-            parts.append(tuple(bytes([b]) for b in tok.encode("utf8"))) 
-
+    with Pool(processes=num_processes) as pool:
+        results = pool.map(worker, args_list)
+    
+    parts = list(chain.from_iterable(results)) #check [LATER]
+                
     loop_counter = 0
-    total = vocab_size - curr_vocab_size
+    total = (vocab_size - curr_vocab_size) if max_loops is None else min(vocab_size - curr_vocab_size, max_loops)
     pbar = tqdm(total=total, desc="BPE")
 
-    while curr_vocab_size < vocab_size:
+    while (max_loops is None or loop_counter < max_loops ) and (curr_vocab_size < vocab_size):
         merge_dict = defaultdict(int)
         for part in parts:
             total_letters = len(part)
@@ -668,4 +689,3 @@ def run_train_bpe(
         
     pbar.close()
     return (vocab, merges)
-
