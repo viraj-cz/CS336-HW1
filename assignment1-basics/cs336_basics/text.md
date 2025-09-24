@@ -16,8 +16,12 @@ The first byte's bits:
 1110xxxx - denotes start of three byte char
 11110xxx - denotes start of four byte char
 10xxxxxx - denotes that this byte is part of the prev seq
+
+# ToDo:
+- Apply merge seems to be taking the biggest CPU time (optimize this part)
+- Byte object seems heavy in Python, we can save some compute there as well
+- I have been stuck on optimizing BPE for a while now, for now I'll move onto the transformer part and come back later
     
-START AGAIN: FROM SUBWORD TOKENIZATION
 
 
 # Alpha/Notes
@@ -29,7 +33,4 @@ START AGAIN: FROM SUBWORD TOKENIZATION
 # Questions:
 - Gotta look into how the special tokens are handled and if I am handling them correctly
 
-# Later
-- gotta use multi-processing for tokenization
-- gotta profile (cProfile or Scalene) and optimize
 

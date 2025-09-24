@@ -68,23 +68,23 @@ def run_train_bpe(
         curr_vocab_size += 1
     
     merges = []
-     
     args_list = []
+
     with open(input_path, "rb") as f:
         num_processes = os.cpu_count() or 1
+        print(f"num processes: {num_processes}")
         boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
 
         for start, end in zip(boundaries[:-1], boundaries[1:]):
             args_list.append((input_path, start, end, special_tokens))
 
-    #CHECK [LATER]
     num_chunks = max(0, len(args_list))
     num_processes = min(num_processes, max(1, num_chunks))
 
     with Pool(processes=num_processes, initializer=init_worker) as pool:
         results = pool.map(worker, args_list)
     
-    parts = list(chain.from_iterable(results)) #check [LATER]
+    parts = list(chain.from_iterable(results))
                 
     loop_counter = 0
     total = vocab_size - curr_vocab_size
