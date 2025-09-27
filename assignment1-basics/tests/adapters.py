@@ -15,7 +15,7 @@ from tqdm import tqdm
 from cs336_basics.pretokenization_example import find_chunk_boundaries
 from multiprocessing import Pool
 from itertools import chain
-from cs336_basics.transformer import Linear
+from cs336_basics.transformer import Linear, Embedding
 
 PAT = None
 
@@ -62,7 +62,9 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    embedding_layer = Embedding(vocab_size, d_model)
+    embedding_layer.load_state_dict({"W": weights})
+    return embedding_layer.forward(token_ids)
 
 
 def run_swiglu(

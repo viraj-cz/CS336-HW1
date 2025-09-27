@@ -33,3 +33,26 @@ class Linear(torch.nn.Module):
         )
 
 
+class Embedding(torch.nn.Module):
+    def __init__(self, num_embeddings, embedding_dim, device=None, dtype=None):
+        super().__init__()
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.device = device
+        self.dtype = dtype
+        empty_tensor = torch.empty(self.num_embeddings, self.embedding_dim, dtype=self.dtype, device=self.device)
+        initialized_embeddings = torch.nn.init.trunc_normal_(
+            tensor=empty_tensor,
+            mean=0,
+            std=1,
+            a= -3,
+            b= 3
+        )
+        self.W = torch.nn.parameter.Parameter(
+            initialized_embeddings
+        )
+
+    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+        #Note: the indexing in PyTorch is quite fancy and can handle batched inp indexing
+        return self.W[token_ids]
+
