@@ -1,0 +1,35 @@
+import torch
+from einops import einsum
+import math
+
+#Note: modern LMs do not use bias for their linear layers!
+class Linear(torch.nn.Module):
+    def __init__(self, in_features, out_features, device=None, dtype=None):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.device = device
+        self.dtype = dtype
+        empty_tensor = torch.empty(self.out_features, self.in_features, dtype=self.dtype, device=self.device)
+        std_dev = math.sqrt(2/(self.in_features+self.out_features))
+        initialized_weights = torch.nn.init.trunc_normal_(
+            tensor=empty_tensor,
+            mean=0,
+            std=std_dev,
+            a= -3 * std_dev,
+            b= 3 * std_dev
+        )
+        self.W = torch.nn.parameter.Parameter(
+            initialized_weights
+        )
+    
+    def forward(self, x: torch.Tensor):
+        #note to self:
+        #here we use: x, self.W, "... d_in, d_in d_out -> ... d_out"
+        #and not: x, self.W, "batch d_in, d_in d_out -> batch d_out"
+        #because in first case it is more robust and work both with and without a batch, i.e a single op and batched ops
+        return einsum(
+            x, self.W, "... d_in, d_out d_in -> ... d_out"
+        )
+
+

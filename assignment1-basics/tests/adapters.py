@@ -15,6 +15,7 @@ from tqdm import tqdm
 from cs336_basics.pretokenization_example import find_chunk_boundaries
 from multiprocessing import Pool
 from itertools import chain
+from cs336_basics.transformer import Linear
 
 PAT = None
 
@@ -37,8 +38,9 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
+    linear_layer = Linear(d_in, d_out)
+    linear_layer.load_state_dict({"W": weights})
+    return linear_layer.forward(in_features)
 
 
 def run_embedding(
