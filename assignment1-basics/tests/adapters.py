@@ -15,7 +15,7 @@ from tqdm import tqdm
 from cs336_basics.pretokenization_example import find_chunk_boundaries
 from multiprocessing import Pool
 from itertools import chain
-from cs336_basics.transformer import Linear, Embedding, RMSNorm
+from cs336_basics.transformer import Linear, Embedding, RMSNorm, swiGLU
 
 PAT = None
 
@@ -96,7 +96,11 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    swiglu = swiGLU(d_model, d_ff)
+    swiglu.linear_1a.W.data = w1_weight
+    swiglu.linear_1b.W.data = w3_weight
+    swiglu.linear_2.W.data = w2_weight
+    return swiglu.forward(in_features)
 
 
 def run_scaled_dot_product_attention(

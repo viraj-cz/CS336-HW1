@@ -81,3 +81,24 @@ class RMSNorm(torch.nn.Module):
         return result.to(in_dtype)
 
 
+def SiLU(x: torch.Tensor):
+    return x * torch.sigmoid(x)
+
+class swiGLU(torch.nn.Module):
+    def __init__(self, d_model, d_ff, device=None, dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.device = device
+        self.dtype = dtype
+
+        self.linear_1a = Linear(self.d_model, self.d_ff, self.device, self.dtype) #W1
+        self.linear_1b = Linear(self.d_model, self.d_ff, self.device, self.dtype) #W3
+        self.linear_2 = Linear(self.d_ff, self.d_model, self.device, self.dtype) #W2
+
+    def forward(self, x):
+        inter_calc = SiLU(self.linear_1a.forward(x)) *  self.linear_1b.forward(x)
+        return self.linear_2.forward(inter_calc)
+
+
+
