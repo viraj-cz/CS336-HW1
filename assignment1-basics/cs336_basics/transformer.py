@@ -1,5 +1,5 @@
 import torch
-from einops import einsum
+from einops import einsum, rearrange
 import math
 
 #Note: modern LMs do not use bias for their linear layers!
@@ -55,4 +55,29 @@ class Embedding(torch.nn.Module):
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
         #Note: the indexing in PyTorch is quite fancy and can handle batched inp indexing
         return self.W[token_ids]
+
+class RMSNorm(torch.nn.Module):
+    def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
+        super().__init__()
+        self.eps = eps
+        self.d_model = d_model
+        self.device = device
+        self.dtype = dtype
+        self.gain = torch.nn.parameter.Parameter(
+            torch.randn(self.d_model, device=self.device, dtype=self.dtype)
+        )
+    
+    def forward(self, x: torch.Tensor):
+        in_dtype = x.dtype
+        x = x.to(torch.float32)
+
+        x_squared = x ** 2
+        x_squared_plus_eps = x_squared + self.eps
+        unscaled_RMS = einsum(x_squared_plus_eps, "batch_size seq_length d_model -> batch_size seq_length")
+        RMS = torch.sqrt(1/self.d_model * unscaled_RMS)
+        RMS_scaled = rearrange(RMS, "batch_size seq_length -> batch_size seq_length 1") #I fucking love einops
+        result = x/RMS_scaled * self.gain
+
+        return result.to(in_dtype)
+
 

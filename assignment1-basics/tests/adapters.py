@@ -15,7 +15,7 @@ from tqdm import tqdm
 from cs336_basics.pretokenization_example import find_chunk_boundaries
 from multiprocessing import Pool
 from itertools import chain
-from cs336_basics.transformer import Linear, Embedding
+from cs336_basics.transformer import Linear, Embedding, RMSNorm
 
 PAT = None
 
@@ -391,6 +391,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
+    
+    rmsnorm_layer = RMSNorm(d_model, eps)
+    rmsnorm_layer.load_state_dict({"gain": weights})
+    return rmsnorm_layer.forward(in_features)
     raise NotImplementedError
 
 
